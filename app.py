@@ -57,7 +57,15 @@ VERTEX_LABELS = {0: "Vertex 1 (Red)", 1: "Vertex 2 (Blue)", 2: "Vertex 3 (Green)
 VERTICES = np.array([[0.0, 0.0], [1.0, 0.0], [0.5, np.sqrt(3) / 2]])
 
 
-def generate_fractal(s1: float, s2: float, s3: float, n_points: int = NUM_POINTS):
+def _name_seed(name: str, s1: float, s2: float, s3: float) -> int:
+    """Derive a deterministic seed from the user's name and scores."""
+    raw = f"{name.strip().lower()}:{int(s1)}:{int(s2)}:{int(s3)}"
+    return abs(hash(raw)) % (2**31)
+
+
+def generate_fractal(
+    s1: float, s2: float, s3: float, name: str = "", n_points: int = NUM_POINTS
+):
     """Run the Chaos Game and return (x, y, vertex_indices)."""
     total = s1 + s2 + s3
     if total == 0:
@@ -66,7 +74,8 @@ def generate_fractal(s1: float, s2: float, s3: float, n_points: int = NUM_POINTS
     else:
         weights = [s1 / total, s2 / total, s3 / total]
 
-    rng = np.random.default_rng(seed=42)
+    seed = _name_seed(name, s1, s2, s3)
+    rng = np.random.default_rng(seed=seed)
     chosen = rng.choice(3, size=n_points, p=weights)
 
     # Start from the centroid
@@ -136,7 +145,7 @@ if generate_btn or "current_fig_bytes" in st.session_state:
             st.warning("Please enter your name before generating a fractal.")
             st.stop()
 
-        xs, ys, chosen = generate_fractal(score1, score2, score3)
+        xs, ys, chosen = generate_fractal(score1, score2, score3, name=user_name.strip())
         title = (
             f"{user_name.strip()} · Scores: {int(score1)}, {int(score2)}, {int(score3)}"
         )
@@ -187,6 +196,10 @@ if generate_btn or "current_fig_bytes" in st.session_state:
             "For Gmail you can use an **App Password** "
             "(https://myaccount.google.com/apppasswords)."
         )
+        st.warning(
+            "⚠️ Credentials are stored temporarily in memory for this session only "
+            "and are cleared when you close the browser tab."
+        )
         email_to = st.text_input("Recipient email address", key="email_to")
         smtp_server = st.text_input("SMTP server", value="smtp.gmail.com", key="smtp_server")
         smtp_port = st.number_input("SMTP port", value=587, step=1, key="smtp_port")
@@ -229,8 +242,14 @@ if generate_btn or "current_fig_bytes" in st.session_state:
                         server.sendmail(smtp_user, email_to, msg.as_string())
 
                     st.success(f"Email sent successfully to {email_to}!")
-                except Exception as exc:  # noqa: BLE001
-                    st.error(f"Failed to send email: {exc}")
+                except smtplib.SMTPAuthenticationError:
+                    st.error("Authentication failed. Please check your username and password.")
+                except smtplib.SMTPConnectError:
+                    st.error("Could not connect to the SMTP server. Check the server address and port.")
+                except smtplib.SMTPException as exc:
+                    st.error(f"An SMTP error occurred: {exc}")
+                except OSError:
+                    st.error("Network error. Please check your connection and SMTP settings.")
 
 # ---------------------------------------------------------------------------
 # Gallery
